@@ -16,5 +16,6 @@ null,
 {"id":14,"expanded":false,"name":"Residence I","order":11,"parentId":1,"scrollX":0,"scrollY":0,"quick":false},
 {"id":15,"expanded":false,"name":"Residence II","order":12,"parentId":1,"scrollX":0,"scrollY":0,"quick":false},
 {"id":16,"expanded":false,"name":"Residence III","order":13,"parentId":1,"scrollX":0,"scrollY":0,"quick":false},
-{"id":17,"expanded":false,"name":"Farmhouse","order":14,"parentId":1,"scrollX":1347.2727272727273,"scrollY":758.1818181818182,"quick":false}
+{"id":17,"expanded":false,"name":"Farmhouse","order":14,"parentId":1,"scrollX":1347.2727272727273,"scrollY":758.1818181818182,"quick":false},
+{"id":18,"expanded":false,"name":"Pre-Battle Testing","order":18,"parentId":0,"scrollX":0,"scrollY":0,"quick":false}
 ]
