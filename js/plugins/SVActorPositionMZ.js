@@ -485,4 +485,32 @@
     this.setHome(x, y);
   };
 
+  // --------------------
+  // set weapon animation's position
+  // --------------------
+  const _Sprite_Weapon_setup = Sprite_Weapon.prototype.setup;
+  Sprite_Weapon.prototype.setup = function(weaponImageId) {
+    _Sprite_Weapon_setup.call(this, weaponImageId);
+    this.setPosition();
+  };
+
+  Sprite_Weapon.prototype.setPosition = function() {
+    // set X position by actor sprite size
+    const actorBitmap = this.parent._mainSprite.bitmap;
+    const actorSpriteWidth = actorBitmap ? actorBitmap.width / 9 : 64;
+    this.x = -16 - (actorSpriteWidth - 64) / 2;
+    // set Y default position
+    this.y = 0;
+    // change X,Y position by plugin command or actor's note
+    const battler = this.parent._battler;
+    const meta = battler.actor().meta;
+    const actorId = battler.actorId();
+    if(actorId && battler){
+      const pixelX = $gameSystem.svWeaponX[actorId];
+      const pixelY = $gameSystem.svWeaponY[actorId];
+      this.x += pixelX != null ? pixelX : (+meta.SVWeaponRight || 0);
+      this.y -= pixelY != null ? pixelY : (+meta.SVWeaponHeight || 0);
+    }
+  };
+
 })();
