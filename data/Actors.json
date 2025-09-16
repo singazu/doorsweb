@@ -1,7 +1,7 @@
 [
 null,
-{"id":1,"battlerName":"hero svb","characterIndex":0,"characterName":"hero_%(4)","classId":1,"equips":[2,0],"faceIndex":7,"faceName":"faces1","traits":[],"initialLevel":1,"maxLevel":99,"name":"Captain Norin","nickname":"","note":"","profile":""},
-{"id":2,"battlerName":"monk1","characterIndex":0,"characterName":"guard1_%(4)","classId":2,"equips":[0,0],"faceIndex":0,"faceName":"faces1","traits":[],"initialLevel":1,"maxLevel":99,"name":"Rocco","nickname":"","note":"Guard 1","profile":""},
+{"id":1,"battlerName":"hero svb","characterIndex":0,"characterName":"hero_%(4)","classId":4,"equips":[2,0],"faceIndex":7,"faceName":"faces1","traits":[],"initialLevel":1,"maxLevel":99,"name":"Captain Norin","nickname":"","note":"","profile":""},
+{"id":2,"battlerName":"guard1svb","characterIndex":0,"characterName":"guard1_%(4)","classId":2,"equips":[0,0],"faceIndex":0,"faceName":"faces1","traits":[],"initialLevel":1,"maxLevel":99,"name":"Rocco","nickname":"","note":"Guard 1","profile":""},
 {"id":3,"battlerName":"guard 2 svb","characterIndex":0,"characterName":"guard2_%(4)","classId":3,"equips":[31,0],"faceIndex":1,"faceName":"faces1","traits":[],"initialLevel":1,"maxLevel":99,"name":"Aster","nickname":"","note":"Guard 2","profile":""},
 {"id":4,"battlerName":"testactor","characterIndex":0,"characterName":"blacksmith_%(4)","classId":4,"equips":[31,0],"faceIndex":4,"faceName":"faces2","traits":[],"initialLevel":1,"maxLevel":99,"name":"Gwynne","nickname":"","note":"","profile":""},
 {"id":5,"battlerName":"monk1","characterIndex":0,"characterName":"monk1_%(4)","classId":5,"equips":[31,0],"faceIndex":4,"faceName":"faces1","traits":[],"initialLevel":1,"maxLevel":99,"name":"Joyo","nickname":"","note":"","profile":""},
