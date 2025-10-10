@@ -1,6 +1,6 @@
 /*:
  * @author Synrec/Kylestclr
- * @plugindesc v1.0 A plugin which will allow for party management creation
+ * @plugindesc v1.1 A plugin which will allow for party management creation
  * @url https://synrec.itch.io/
  * @target MZ
  * 
@@ -2232,12 +2232,16 @@ Game_Party.prototype.swapMultiParty = function(
         members_1.push(member_2)
     }
     if(party_id_1){
-        party_1['Members'] = members_1;
+        party_1['Members'] = members_1.filter(Boolean);
     }else{
-        this._actors = members_1
+        this._actors = members_1.filter(Boolean);
     }
     if(party_id_1 == party_id_2){
-        party_2_members = party_1['Members']
+        if(party_id_1){
+            party_2_members = party_1['Members'];
+        }else{
+            party_2_members = this._actors;
+        }
     }
     index = 0;
     const members_2 = party_2_members.map((mem)=>{
@@ -2253,9 +2257,9 @@ Game_Party.prototype.swapMultiParty = function(
         members_2.push(member_1)
     }
     if(party_id_2){
-        party_2['Members'] = members_2;
+        party_2['Members'] = members_2.filter(Boolean);
     }else{
-        this._actors = members_2;
+        this._actors = members_2.filter(Boolean);
     }
     this.removeExcessMultiMembers();
     $gamePlayer.refresh();
@@ -2404,7 +2408,8 @@ Game_Party.prototype.nextMultiParty = function(){
         }
         const considered_party = all_parties[new_index];
         if(considered_party){
-            const members = considered_party['Members'];
+            const members = considered_party['Members'].filter(Boolean);
+            console.log(members)
             if(members.length > 0){
                 const enable_switch = eval(considered_party['Unlock Switch']);
                 if(!enable_switch || $gameSwitches.value(enable_switch)){
@@ -2447,7 +2452,7 @@ Game_Party.prototype.prevMultiParty = function(){
         }
         const considered_party = all_parties[new_index];
         if(considered_party){
-            const members = considered_party['Members'];
+            const members = considered_party['Members'].filter(Boolean);
             if(members.length > 0){
                 const enable_switch = eval(considered_party['Unlock Switch']);
                 if(!enable_switch || $gameSwitches.value(enable_switch)){
