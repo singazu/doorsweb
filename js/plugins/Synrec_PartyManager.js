@@ -52,6 +52,12 @@
  * @type boolean
  * @default false
  * 
+ * @param Event Touch Trigger
+ * @desc If party on same map with player and
+ * event touches the party, auto swap and trigger event
+ * @type boolean
+ * @default false
+ * 
  * @param Allow Party Swap Switch
  * @desc The game switch to allow party swapping
  * @type switch
@@ -1695,6 +1701,7 @@ const Syn_PrtyMngt = {};
 Syn_PrtyMngt.Plugin = PluginManager.parameters(`Synrec_PartyManager`);
 
 Syn_PrtyMngt.ISOLATED_INVENTORIES = eval(Syn_PrtyMngt.Plugin['Allow Separate Inventories']);
+Syn_PrtyMngt.EVENT_TOUCH_TRIGGER = eval(Syn_PrtyMngt.Plugin['Event Touch Trigger']);
 Syn_PrtyMngt.ALLOW_SWAP_SWITCH = Syn_PrtyMngt.Plugin['Allow Party Swap Switch'];
 Syn_PrtyMngt.NEXT_PARTY_BUTTON = Syn_PrtyMngt.Plugin['Next Party Button'];
 Syn_PrtyMngt.PREV_PARTY_BUTTON = Syn_PrtyMngt.Plugin['Previous Party Button'];
@@ -1899,11 +1906,15 @@ GameCharacter_PartyLead.prototype.initialize = function(party_id){
 GameCharacter_PartyLead.prototype.setupParty = function(party_id){
     const party_data = $gameParty.getMultiParty(party_id);
     if(!party_data){
-        throw new Error(`No party data obtained for ${party_id}`);
+        this.setThrough(true);
+        this.setImage("", 0);
+        return;
     }
     this._data = party_data;
     const current_party = $gameParty.currentMultiParty();
     if(current_party['Identifier'] == party_data['Identifier']){
+        this.setThrough(true);
+        this.setImage("", 0);
         return;
     }
     const members = party_data['Members'];
@@ -1919,6 +1930,7 @@ GameCharacter_PartyLead.prototype.setupParty = function(party_id){
     this.locate(x, y);
     const d = eval(party_data['Map Direction']);
     this.setDirection(d);
+    this._allow_event_touch = true;
 }
 
 GameCharacter_PartyLead.prototype.interact = function(){
@@ -1946,6 +1958,41 @@ GameCharacter_PartyLead.prototype.interact = function(){
         const evnt = eval(actor_config['Default Event']);
         $gameTemp.reserveCommonEvent(evnt);
         this.turnTowardPlayer();
+    }
+}
+
+Game_Event.prototype.getPartyLead = function(x, y){
+    const cur_party = $gameParty.currentMultiParty();
+    const parties = $gameParty._multi_parties.filter((party)=>{
+        return party['Identifier'] != cur_party['Identifier'];
+    })
+    return parties.find((party)=>{
+        const sw_id = eval(party['Unlock Switch']);
+        if(sw_id && !$gameSwitches.value(sw_id))return false;
+        const mx = eval(party['Map X']);
+        const my = eval(party['Map Y']);
+        return (
+            mx == x &&
+            my == y
+        )
+    })
+}
+
+Syn_PrtyMngt_GmEvnt_ChkEvntTrigTch = Game_Event.prototype.checkEventTriggerTouch;
+Game_Event.prototype.checkEventTriggerTouch = function(x, y) {
+    Syn_PrtyMngt_GmEvnt_ChkEvntTrigTch.call(this, ...arguments);
+    if(!Syn_PrtyMngt.EVENT_TOUCH_TRIGGER)return;
+    if (!$gameMap.isEventRunning()) {
+        const party_lead = this.getPartyLead(x, y);
+        const id = party_lead['Identifier'];
+        if (this._trigger === 2 && party_lead) {
+            if (
+                !this.isJumping() && 
+                this.isNormalPriority()
+            ) {
+                $gameParty.setFastMultiParty(id, this);
+            }
+        }
     }
 }
 
@@ -2292,6 +2339,43 @@ Game_Party.prototype.setMultiParty = function(id){
             const y = eval(party['Map Y']);
             const d = eval(party['Map Direction']);
             $gamePlayer.reserveTransfer(map, x, y, d, 0);
+            return true;
+        }
+    }
+}
+
+Game_Party.prototype.setFastMultiParty = function(id, event){
+    const current_party = this.currentMultiParty();
+    current_party['Default Map'] = $gameMap._mapId;
+    current_party['Map X'] = $gamePlayer.x;
+    current_party['Map Y'] = $gamePlayer.y;
+    current_party['Map Direction'] = $gamePlayer.direction();
+    const parties = this._multi_parties;
+    for(let i = 0; i < parties.length; i++){
+        const party = parties[i];
+        if(
+            party['Identifier'] == id &&
+            party['Members'].length > 0
+        ){
+            this._party_index = i;
+            const map = eval(party['Default Map']);
+            const x = eval(party['Map X']);
+            const y = eval(party['Map Y']);
+            const d = eval(party['Map Direction']);
+            $gameMap.setup(map);
+            $gamePlayer.setDirection(d);
+            $gamePlayer.locate(x,y);
+            $gamePlayer.refresh();
+            if(event){
+                event.turnTowardPlayer();
+                event.start();
+            }
+            const lead_objs = $gameTemp._partyLeads;
+            for(let i = 0; i < lead_objs.length; i++){
+                const lead_obj = lead_objs[i];
+                const party = parties[i];
+                lead_obj.setupParty(party['Identifier']);
+            }
             return true;
         }
     }
