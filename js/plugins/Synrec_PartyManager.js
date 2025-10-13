@@ -146,6 +146,12 @@
  * @type struct<actorEvent>[]
  * @default []
  * 
+ * @param Add Switch
+ * @desc If switch enabled, add actor to party
+ * Actor is removed otherwise, if zero, ignored.
+ * @type switch
+ * @default 0
+ * 
  */
 /*~struct~partyConfig:
  *
@@ -162,6 +168,13 @@
  * 
  * @param Unlock Switch
  * @desc Switch must be enabled or unset
+ * Auto enable switch if first party
+ * @type switch
+ * @default 0
+ * 
+ * @param Lock Switch
+ * @desc If this switch is enabled, lock party
+ * Will automatically swap party
  * @type switch
  * @default 0
  * 
@@ -1779,6 +1792,12 @@ Game_Temp.prototype.clearAllowedParties = function(){
     this._permitted_management_parties = null;
 }
 
+Syn_PrtyMngt_GmSw_SetVal = Game_Switches.prototype.setValue;
+Game_Switches.prototype.setValue = function(switchId, value) {
+    Syn_PrtyMngt_GmSw_SetVal.call(this, ...arguments);
+    $gameParty.doSwitchAction(switchId, value);
+}
+
 Syn_PrtyMngt_GmCharBse_IsCollChars = Game_CharacterBase.prototype.isCollidedWithCharacters;
 Game_CharacterBase.prototype.isCollidedWithCharacters = function(x, y) {
     return Syn_PrtyMngt_GmCharBse_IsCollChars.call(this, ...arguments) || this.isCollidedWithParty(x, y);
@@ -1786,11 +1805,17 @@ Game_CharacterBase.prototype.isCollidedWithCharacters = function(x, y) {
 
 Game_CharacterBase.prototype.isCollidedWithParty = function(x, y){
     const current_map = $gameMap._mapId;
+    const all_parties = $gameParty._multi_parties || [];
+    if(all_parties.length <= 0)return false;
     const current_party = $gameParty.currentMultiParty();
-    const parties = $gameParty._multi_parties.filter((party)=>{
+    const parties = all_parties.filter((party)=>{
+        const unlock_sw = eval(party['Unlock Switch']);
+        const lock_sw = eval(party['Lock Switch']);
         return (
             party['Identifier'] != current_party['Identifier'] &&
-            party['Default Map'] == current_map
+            party['Default Map'] == current_map &&
+            (!unlock_sw || $gameSwitches.value(unlock_sw)) &&
+            (!lock_sw && !$gameSwitches.value(lock_sw))
         );
     });
     return parties.some((party)=>{
@@ -1899,13 +1924,22 @@ GameCharacter_PartyLead.prototype.constructor = GameCharacter_PartyLead;
 
 GameCharacter_PartyLead.prototype.initialize = function(party_id){
     Game_Character.prototype.initialize.call(this);
+    this._party_id = party_id;
     this.setThrough(true);
     this.setupParty(party_id);
 }
 
+GameCharacter_PartyLead.prototype.lockedParty = function(party_data){
+    const unlock_sw = eval(party_data['Unlock Switch']);
+    const lock_sw = eval(party_data['Lock Switch']);
+    if(lock_sw && $gameSwitches.value(lock_sw))return true;
+    if(unlock_sw && !$gameSwitches.value(unlock_sw))return true;
+    return false;
+}
+
 GameCharacter_PartyLead.prototype.setupParty = function(party_id){
     const party_data = $gameParty.getMultiParty(party_id);
-    if(!party_data){
+    if(!party_data || this.lockedParty(party_data)){
         this.setThrough(true);
         this.setImage("", 0);
         return;
@@ -1984,6 +2018,7 @@ Game_Event.prototype.checkEventTriggerTouch = function(x, y) {
     if(!Syn_PrtyMngt.EVENT_TOUCH_TRIGGER)return;
     if (!$gameMap.isEventRunning()) {
         const party_lead = this.getPartyLead(x, y);
+        if(!party_lead)return;
         const id = party_lead['Identifier'];
         if (this._trigger === 2 && party_lead) {
             if (
@@ -2086,6 +2121,32 @@ Game_Party.prototype.maxBattleMembers = function() {
         return Syn_PrtyMngt_GmPrty_MaxBattMems.call(this, ...arguments);
     }
     return eval(party['Max Battle Members']);
+}
+
+Syn_PrtyMngt_GmPrty_SetpBattTestMems = Game_Party.prototype.setupBattleTestMembers;
+Game_Party.prototype.setupBattleTestMembers = function() {
+    Syn_PrtyMngt_GmPrty_SetpBattTestMems.call(this, ...arguments);
+    if(DataManager.isBattleTest()){
+        this._member_object_mode = this._actors.some((actor)=>{
+            return actor instanceof Game_Actor;
+        })
+        for (const battler of $dataSystem.testBattlers) {
+            const multi_parties = this._multi_parties;
+            const init_party = multi_parties[0];
+            init_party['Members'] = [];
+            const actor = $gameActors.actor(battler.actorId);
+            if (actor) {
+                actor.changeLevel(battler.level, false);
+                actor.initEquips(battler.equips);
+                actor.recoverAll();
+                if(this._member_object_mode){
+                    init_party['Members'].push(actor);
+                }else{
+                    init_party['Members'].push(battler.actorId);
+                }
+            }
+        }
+    }
 }
 
 Syn_PrtyMngt_GmPrty_Itms = Game_Party.prototype.items;
@@ -2282,6 +2343,127 @@ Game_Party.prototype.removeExcessMultiMembers = function(){
     })
 }
 
+Game_Party.prototype.doSwitchAction = function(sw, val){
+    const current_party = this.currentMultiParty();
+    const lock_sw = eval(current_party['Lock Switch']);
+    if(lock_sw == sw && !!val && lock_sw){
+        this.nextMultiParty();
+    }
+    const actor_configs = JsonEx.makeDeepCopy(Syn_PrtyMngt.ACTOR_CONFIGURATIONS);
+    actor_configs.forEach((config)=>{
+        const actor_id = eval(config['Actor']);
+        const add_sw = eval(config['Add Switch']);
+        if(!add_sw)return;
+        if(add_sw == sw){
+            const multi_parties = this._multi_parties;
+            if(!val){
+                if(this._member_object_mode){
+                    while(
+                        this._actors.some((mem)=>{
+                            return mem._actorId == actor_id;
+                        })
+                    ){
+                        for(let i = 0; i < this._actors.length; i++){
+                            const actor = this._actors[i];
+                            if(actor._actorId == actor_id){
+                                this._actors.splice(i, 1);
+                                i--;
+                            }
+                        }
+                    }
+                    multi_parties.forEach((party)=>{
+                        const members = party['Members'];
+                        for(let i = 0; i < members.length; i++){
+                            const mem = members[i];
+                            if(mem._actorId == actor_id){
+                                members.splice(i, 1);
+                                i--;
+                            }
+                        }
+                    })
+                }else{
+                    for(let i = 0; i < this._actors.length; i++){
+                        const id = this._actors[i];
+                        if(id == actor_id){
+                            this._actors.splice(i, 1);
+                            i--;
+                        }
+                    }
+                    multi_parties.forEach((party)=>{
+                        const members = party['Members'];
+                        for(let i = 0; i < members.length; i++){
+                            const id = members[i];
+                            if(id == actor_id){
+                                members.splice(i, 1);
+                                i--;
+                            }
+                        }
+                    })
+                }
+            }else{
+                if(this._member_object_mode){
+                    const actor = new Game_Actor(actor_id);
+                    this._actors.push(actor);
+                }else{
+                    if(!this._actors.includes(actor_id)){
+                        $gameActors.actor(actor_id);
+                        this._actors.push(actor_id);
+                    }
+                }
+            }
+        }
+    })
+    $gamePlayer.refresh();
+    this.emergencyUnlock();
+    const cur_party = this.currentMultiParty();
+    const cur_unlock_sw = eval(cur_party['Unlock Switch']);
+    const cur_lock_sw = eval(cur_party['Lock Switch']);
+    if($gameMap._mapId){
+        cur_party['Default Map'] = $gameMap._mapId;
+        cur_party['Map X'] = $gamePlayer.x;
+        cur_party['Map Y'] = $gamePlayer.y;
+        cur_party['Map Direction'] = $gamePlayer.direction();
+    }
+    if(
+        (
+            cur_unlock_sw && 
+            !$gameSwitches.value(cur_unlock_sw)
+        ) ||
+        (
+            cur_lock_sw &&
+            $gameSwitches.value(cur_lock_sw)
+        )
+    ){
+        this.nextMultiParty();
+        const cur_party = this.currentMultiParty();
+        const map = eval(cur_party['Default Map']);
+        const x = eval(cur_party['Map X']);
+        const y = eval(cur_party['Map Y']);
+        const d = eval(cur_party['Map Direction']);
+        $gamePlayer.reserveTransfer(map, x, y, d, 0);
+    }
+    ($gameTemp._partyLeads || []).forEach((lead_char)=>{
+        const party_id = lead_char._party_id;
+        lead_char.setupParty(party_id);
+    })
+}
+
+Game_Party.prototype.emergencyUnlock = function(){
+    if(this.allLocked()){
+        const multi_parties = this._multi_parties;
+        const first_party = multi_parties[0];
+        const unlock_sw = eval(first_party['Unlock Switch']);
+        const lock_sw = eval(first_party['Lock Switch']);
+        if(unlock_sw){
+            $gameSwitches.setValue(unlock_sw, true);
+        }
+        if(lock_sw){
+            $gameSwitches.setValue(lock_sw, false);
+        }
+        this.nextMultiParty();
+    }
+}
+
 Game_Party.prototype.setupMultiPartyDefaults = function(){
     let setup_starting = false;
     const object_mode = this._member_object_mode;
@@ -2322,6 +2504,32 @@ Game_Party.prototype.setupMultiPartyDefaults = function(){
             }
         }
     })
+    const first_party = parties[0];
+    if(first_party){
+        const unlock_sw = eval(first_party['Unlock Switch']);
+        const lock_sw = eval(first_party['Lock Switch']);
+        $gameSwitches.setValue(unlock_sw, true);
+        $gameSwitches.setValue(lock_sw, false);
+    }
+}
+
+Game_Party.prototype.lockedParty = function(party_data){
+    const unlock_sw = eval(party_data['Unlock Switch']);
+    const lock_sw = eval(party_data['Lock Switch']);
+    if(lock_sw && $gameSwitches.value(lock_sw))return true;
+    if(unlock_sw && !$gameSwitches.value(unlock_sw))return true;
+    return false;
+}
+
+Game_Party.prototype.allLocked = function(){
+    const party_obj = this;
+    const locks = this._multi_parties.map((party)=>{
+        return party_obj.lockedParty(party);
+    })
+    if(locks.some(value => !value)){
+        return false;
+    }
+    return true;
 }
 
 Game_Party.prototype.setMultiParty = function(id){
@@ -2335,7 +2543,8 @@ Game_Party.prototype.setMultiParty = function(id){
         const party = parties[i];
         if(
             party['Identifier'] == id &&
-            party['Members'].length > 0
+            party['Members'].length > 0 &&
+            !this.lockedParty(party)
         ){
             this._party_index = i;
             const map = eval(party['Default Map']);
@@ -2359,7 +2568,8 @@ Game_Party.prototype.setFastMultiParty = function(id, event){
         const party = parties[i];
         if(
             party['Identifier'] == id &&
-            party['Members'].length > 0
+            party['Members'].length > 0 &&
+            !this.lockedParty(party)
         ){
             this._party_index = i;
             const map = eval(party['Default Map']);
@@ -2409,16 +2619,18 @@ Game_Party.prototype.nextMultiParty = function(){
         const considered_party = all_parties[new_index];
         if(considered_party){
             const members = considered_party['Members'].filter(Boolean);
-            console.log(members)
             if(members.length > 0){
-                const enable_switch = eval(considered_party['Unlock Switch']);
-                if(!enable_switch || $gameSwitches.value(enable_switch)){
-                    this._party_index = new_index;
-                    current_party['Default Map'] = $gameMap._mapId;
-                    current_party['Map X'] = $gamePlayer.x;
-                    current_party['Map Y'] = $gamePlayer.y;
-                    current_party['Map Direction'] = $gamePlayer.direction();
-                    return true;
+                const disable_switch = eval(considered_party['Lock Switch']);
+                if(!disable_switch || !$gameSwitches.value(disable_switch)){
+                    const enable_switch = eval(considered_party['Unlock Switch']);
+                    if(!enable_switch || $gameSwitches.value(enable_switch)){
+                        this._party_index = new_index;
+                        current_party['Default Map'] = $gameMap._mapId;
+                        current_party['Map X'] = $gamePlayer.x;
+                        current_party['Map Y'] = $gamePlayer.y;
+                        current_party['Map Direction'] = $gamePlayer.direction();
+                        return true;
+                    }
                 }
             }
         }
@@ -2454,14 +2666,17 @@ Game_Party.prototype.prevMultiParty = function(){
         if(considered_party){
             const members = considered_party['Members'].filter(Boolean);
             if(members.length > 0){
-                const enable_switch = eval(considered_party['Unlock Switch']);
-                if(!enable_switch || $gameSwitches.value(enable_switch)){
-                    this._party_index = new_index;
-                    current_party['Default Map'] = $gameMap._mapId;
-                    current_party['Map X'] = $gamePlayer.x;
-                    current_party['Map Y'] = $gamePlayer.y;
-                    current_party['Map Direction'] = $gamePlayer.direction();
-                    return true;
+                const disable_switch = eval(considered_party['Lock Switch']);
+                if(!disable_switch || !$gameSwitches.value(disable_switch)){
+                    const enable_switch = eval(considered_party['Unlock Switch']);
+                    if(!enable_switch || $gameSwitches.value(enable_switch)){
+                        this._party_index = new_index;
+                        current_party['Default Map'] = $gameMap._mapId;
+                        current_party['Map X'] = $gamePlayer.x;
+                        current_party['Map Y'] = $gamePlayer.y;
+                        current_party['Map Direction'] = $gamePlayer.direction();
+                        return true;
+                    }
                 }
             }
         }
