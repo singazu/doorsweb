@@ -1325,6 +1325,29 @@
  * @default 0
  * 
  */
+/*~struct~sceneButton:
+ * 
+ * @param Screen X
+ * @desc Position on screen
+ * @type text
+ * @default 0
+ * 
+ * @param Screen Y
+ * @desc Position on screen
+ * @type text
+ * @default 0
+ * 
+ * @param Cold Graphic
+ * @desc Graphic file for button
+ * @type file
+ * @dir img/pictures/
+ * 
+ * @param Hot Graphic
+ * @desc Graphic file for button 
+ * @type file
+ * @dir img/pictures/
+ * 
+ */
 /*~struct~partyUI:
  * 
  * @param Backgrounds
@@ -1362,6 +1385,10 @@
  * @desc Add game data windows to scene
  * @type struct<gameDataWindow>[]
  * @default []
+ * 
+ * @param Confirm Button
+ * @desc If set, must be clicked to exit scene
+ * @type struct<sceneButton>
  * 
  */
 
@@ -1657,6 +1684,15 @@ function GAME_DATA_WINDOW_PARSER_PRTYMNGMNT(obj){
     }
 }
 
+function BUTTON_PARSER_PRTYMNGMT(obj){
+    try{
+        obj = JSON.parse(obj);
+        return obj;
+    }catch(e){
+        return;
+    }
+}
+
 function PARTY_UI_PARSER_PRTYMNGMT(obj){
     try{
         obj = JSON.parse(obj);
@@ -1704,6 +1740,7 @@ function PARTY_UI_PARSER_PRTYMNGMT(obj){
         }catch(e){
             obj['Game Data Windows'] = [];
         }
+        obj['Confirm Button'] = BUTTON_PARSER_PRTYMNGMT(obj['Confirm Button']);
         return obj;
     }catch(e){
         return;
@@ -1808,22 +1845,14 @@ Game_CharacterBase.prototype.isCollidedWithParty = function(x, y){
     const all_parties = $gameParty._multi_parties || [];
     if(all_parties.length <= 0)return false;
     const current_party = $gameParty.currentMultiParty();
-    const parties = all_parties.filter((party)=>{
-        const unlock_sw = eval(party['Unlock Switch']);
-        const lock_sw = eval(party['Lock Switch']);
+    const parties = $gameTemp._partyLeads.filter((party)=>{
         return (
-            party['Identifier'] != current_party['Identifier'] &&
-            party['Default Map'] == current_map &&
-            (!unlock_sw || $gameSwitches.value(unlock_sw)) &&
-            (!lock_sw && !$gameSwitches.value(lock_sw))
-        );
-    });
-    return parties.some((party)=>{
-        return (
-            eval(party['Map X']) == x &&
-            eval(party['Map Y']) == y
+            party.x == x &&
+            party.y == y &&
+            !party.isThrough()
         )
     })
+    return parties.length > 0;
 }
 
 Syn_PrtyMngt_GmPlyr_SetpNwGm = Game_Player.prototype.setupForNewGame;
@@ -2902,6 +2931,106 @@ SpriteSynrec_MngtBattler.prototype.setMotion = function(motion_name){
 SpriteSynrec_MngtBattler.prototype.refreshMotion = function(){
     if(!this._setMotion)this._setMotion = 'walk';
     this.startMotion(this._setMotion);
+}
+
+function SpriteSynrec_ConfirmButton(){
+    this.initialize(...arguments);
+}
+
+SpriteSynrec_ConfirmButton.prototype = Object.create(Sprite.prototype);
+SpriteSynrec_ConfirmButton.prototype.constructor = SpriteSynrec_ConfirmButton;
+
+SpriteSynrec_ConfirmButton.prototype.initialize = function(){
+    Sprite.prototype.initialize.call(this);
+    this.createColdSprite();
+    this.createHotSprite();
+    const UI = Syn_PrtyMngt.UI;
+    const button = UI['Confirm Button'];
+    this.x = eval(button['Screen X']);
+    this.y = eval(button['Screen Y']);
+    console.log(this)
+}
+
+SpriteSynrec_ConfirmButton.prototype.createColdSprite = function(){
+    const UI = Syn_PrtyMngt.UI;
+    const button = UI['Confirm Button'];
+    const gfx_name = button['Cold Graphic'];
+    const sprite = new Sprite();
+    sprite.bitmap = ImageManager.loadPicture(gfx_name);
+    if(sprite.bitmap.width == 0 || sprite.bitmap.height == 0){
+        this._reloadBitmaps = true;
+    }
+    this.addChild(sprite);
+    this._cold_sprite = sprite;
+}
+
+SpriteSynrec_ConfirmButton.prototype.createHotSprite = function(){
+    const UI = Syn_PrtyMngt.UI;
+    const button = UI['Confirm Button'];
+    const gfx_name = button['Hot Graphic'];
+    const sprite = new Sprite();
+    sprite.visible = false;
+    sprite.bitmap = ImageManager.loadPicture(gfx_name);
+    if(sprite.bitmap.width == 0 || sprite.bitmap.height == 0){
+        this._reloadBitmaps = true;
+    }
+    this.addChild(sprite);
+    this._hot_sprite = sprite;
+}
+
+SpriteSynrec_ConfirmButton.prototype.update = function(){
+    Sprite.prototype.update.call(this, ...arguments);
+    this.updateReloads();
+    this.updateVisibles();
+    this.updateClick();
+}
+
+SpriteSynrec_ConfirmButton.prototype.updateReloads = function(){
+    if(!this._reloadBitmaps)return;
+    let reload = false;
+    const UI = Syn_PrtyMngt.UI;
+    const button = UI['Confirm Button'];
+    const cold_gfx_name = button['Cold Graphic'];
+    const cold_bitmap = ImageManager.loadPicture(cold_gfx_name);
+    if(cold_bitmap.width == 0 || cold_bitmap.height == 0){
+        reload = true;
+    }
+    this._cold_sprite.bitmap = cold_bitmap;
+    const hot_gfx_name = button['Hot Graphic'];
+    const hot_bitmap = ImageManager.loadPicture(hot_gfx_name);
+    if(hot_bitmap.width == 0 || hot_bitmap.height == 0){
+        reload = true;
+    }
+    this._hot_sprite.bitmap = hot_bitmap;
+    this._reloadBitmaps = reload;
+}
+
+SpriteSynrec_ConfirmButton.prototype.updateVisibles = function(){
+    const tx = TouchInput.x;
+    const ty = TouchInput.y;
+    const sprite = this._cold_sprite;
+    if(
+        tx >= sprite.worldTransform.tx &&
+        ty >= sprite.worldTransform.ty &&
+        tx <= sprite.worldTransform.tx + sprite.width &&
+        ty <= sprite.worldTransform.ty + sprite.height
+    ){
+        sprite.visible = false;
+        this._hot_sprite.visible = true;
+    }else{
+        sprite.visible = true;
+        this._hot_sprite.visible = false;
+    }
+}
+
+SpriteSynrec_ConfirmButton.prototype.updateClick = function(){
+    if(
+        this._hot_sprite.visible &&
+        TouchInput.isTriggered()
+    ){
+        SoundManager.playCancel();
+        SceneManager._scene.popScene();
+    }
 }
 
 Syn_PrtyMngt_SprtsetMap_CrtChars = Spriteset_Map.prototype.createCharacters;
@@ -4105,6 +4234,7 @@ SceneSynrec_PartyEditor.prototype.create = function(){
     this.createActorMemberWindows();
     // this.createNotificationWindow();
     this.createGameDataWindows();
+    this.createConfirmButton();
     this.createHoldCharacterSprite();
     this._tx = TouchInput.x;
     this._ty = TouchInput.y;
@@ -4223,6 +4353,15 @@ SceneSynrec_PartyEditor.prototype.createGameDataWindows = function(){
     }
 }
 
+SceneSynrec_PartyEditor.prototype.createConfirmButton = function(){
+    const UI = Syn_PrtyMngt.UI;
+    if(UI['Confirm Button']){
+        const btn = new SpriteSynrec_ConfirmButton();
+        this.addChild(btn);
+        this._confirm_button = btn;
+    }
+}
+
 SceneSynrec_PartyEditor.prototype.createHoldCharacterSprite = function(){
     const character = new GameCharacter_MenuCharacter();
     const sprite = new Sprite_Character(character);
@@ -4244,12 +4383,16 @@ SceneSynrec_PartyEditor.prototype.update = function(){
     ){
         this.updateTouchWindow();
         this.updateTouchHold();
-        this.updateTouchExit();
+        if(!this._confirm_button){
+            this.updateTouchExit();
+        }
     }else{
         this.updateToggleWindow();
         this.updateKeyHold();
         this.updateActiveWindow();
-        this.updateKeyExit();
+        if(!this._confirm_button){
+            this.updateKeyExit();
+        }
     }
     this.updateHoldSprite();
 }
