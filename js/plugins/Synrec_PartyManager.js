@@ -29,6 +29,27 @@
  * @type text
  * @default 1
  * 
+ * @command Add Actor To Current
+ * @desc Adds an actor to current party
+ * 
+ * @arg Actor
+ * @desc Select the actor
+ * @type actor
+ * @default 0
+ * 
+ * @command Add Actor To ID
+ * @desc Adds an actor to identified party
+ * 
+ * @arg Actor
+ * @desc Select the actor
+ * @type actor
+ * @default 0
+ * 
+ * @arg Identifier
+ * @desc Party Identifier
+ * @type text
+ * @default 1
+ * 
  * 
  * @help
  * Setup the available parties in the plugin parameters
@@ -1797,6 +1818,17 @@ if(Utils.RPGMAKER_NAME == 'MZ'){
         const range = eval(obj['Range']);
         $gameTemp.openManagerProximal(range);
     })
+
+    PluginManager.registerCommand(`Synrec_PartyManager`, `Add Actor To Current`, (obj)=>{
+        const actor = eval(obj['Actor']);
+        $gameParty.addActorToCurrentParty(actor);
+    })
+
+    PluginManager.registerCommand(`Synrec_PartyManager`, `Add Actor To ID`, (obj)=>{
+        const actor = eval(obj['Actor']);
+        const id = obj['Identifier']
+        $gameParty.addActorToIdentifiedParty(id, actor);
+    })
 }
 
 Game_Temp.prototype.openManagerProximal = function(range){
@@ -2191,6 +2223,12 @@ Game_Party.prototype.items = function() {
     return Object.keys(items).map(id => $dataItems[id]);
 }
 
+Syn_PrtyMngt_GmPrty_AddActr = Game_Party.prototype.addActor;
+Game_Party.prototype.addActor = function(actorId) {
+    if(this.actorIdInAnyParty(actorId))return;
+    Syn_PrtyMngt_GmPrty_AddActr.call(this, ...arguments);
+}
+
 Syn_PrtyMngt_GmPrty_Wpns = Game_Party.prototype.weapons;
 Game_Party.prototype.weapons = function() {
     const party = this.currentMultiParty();
@@ -2248,6 +2286,53 @@ Game_Party.prototype.setupStartingMembers = function() {
         return actor instanceof Game_Actor;
     })
     this.setupMultiPartyDefaults();
+}
+
+Game_Party.prototype.actorIdInAnyParty = function(actor_id){
+    const object_mode = this._member_object_mode;
+    if(object_mode)return false;
+    const free_members = this._actors;
+    if(free_members.includes(actor_id))return true;
+    const all_parties = this._multi_parties;
+    return all_parties.some((party)=>{
+        const members = party['Members'];
+        return members.includes(actor_id);
+    })
+}
+
+Game_Party.prototype.addActorToCurrentParty = function(actor_id){
+    const current_party = this.currentMultiParty();
+    const members = current_party['Members'];
+    const max_members = eval(current_party['Max Members']);
+    if(members.length >= max_members)return;
+    const object_mode = this._member_object_mode;
+    if(object_mode){
+        const actor = new Game_Actor(actor_id);
+        members.push(actor);
+    }else{
+        $gameActors.actor(actor_id);
+        if(this.actorIdInAnyParty(actor_id))return;
+        members.push(actor_id);
+    }
+    $gamePlayer.refresh();
+}
+
+Game_Party.prototype.addActorToIdentifiedParty = function(id, actor_id){
+    const current_party = this.getMultiParty(id);
+    if(!current_party)return;
+    const members = current_party['Members'];
+    const max_members = eval(current_party['Max Members']);
+    if(members.length >= max_members)return;
+    const object_mode = this._member_object_mode;
+    if(object_mode){
+        const actor = new Game_Actor(actor_id);
+        members.push(actor);
+    }else{
+        $gameActors.actor(actor_id);
+        if(this.actorIdInAnyParty(actor_id))return;
+        members.push(actor_id);
+    }
+    $gamePlayer.refresh();
 }
 
 Game_Party.prototype.swapMultiParty = function(
@@ -2434,7 +2519,10 @@ Game_Party.prototype.doSwitchAction = function(sw, val){
                     const actor = new Game_Actor(actor_id);
                     this._actors.push(actor);
                 }else{
-                    if(!this._actors.includes(actor_id)){
+                    if(
+                        !this._actors.includes(actor_id) &&
+                        !this.actorIdInAnyParty(actor_id)
+                    ){
                         $gameActors.actor(actor_id);
                         this._actors.push(actor_id);
                     }
