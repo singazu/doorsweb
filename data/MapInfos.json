@@ -1,6 +1,6 @@
 [
 null,
-{"id":1,"expanded":true,"name":"Temple Village","order":1,"parentId":0,"scrollX":1552,"scrollY":710},
+{"id":1,"expanded":true,"name":"Temple Village","order":1,"parentId":0,"scrollX":1552,"scrollY":709.7777777777778},
 {"id":2,"expanded":true,"name":"Forest","order":18,"parentId":0,"scrollX":1622,"scrollY":915,"quick":false},
 {"id":3,"expanded":false,"name":"Defense Pass","order":20,"parentId":0,"scrollX":1088,"scrollY":624,"quick":false},
 {"id":4,"expanded":true,"name":"Temple","order":2,"parentId":1,"scrollX":884.7272727272727,"scrollY":748.909090909091,"quick":false},
